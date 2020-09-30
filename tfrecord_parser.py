@@ -14,13 +14,17 @@ def pad_resize(image, height, width, channels=3):
     Returns:
         numpy nd.array: Description
     """
-
+# here we do 512 512
     image = image.astype(np.uint8)
 
-    padded_image = np.zeros(shape=(height.astype(int), width.astype(int),channels), dtype=np.uint8)
-    h,w,_ =  image.shape
-    padded_image[:h,:w,:] = image
-    return padded_image
+    # padded_image = np.zeros(shape=(height.astype(int), width.astype(int),channels), dtype=np.uint8)
+    # h,w,_ =  image.shape
+    # i
+    # padded_image[:h,:w,:] = image
+    # return padded_image
+    # resized_image = cv2.resize(image, (width.astype(int), height.astype(int))).astype(tf.keras.backend.floatx())
+    # print(width,height)
+    return image
 
 @tf.function
 def decode_pad_img(image_string, pad_height, pad_width):
@@ -39,6 +43,7 @@ def decode_pad_img(image_string, pad_height, pad_width):
   image = tf.numpy_function(pad_resize, [image, pad_height, pad_width], Tout=tf.uint8)
   image = tf.cast(image, tf.keras.backend.floatx())
   #image.set_shape([None, None, 3])
+  # normalize the image
   return image-[103.939, 116.779, 123.68]
 
 @tf.function
@@ -78,10 +83,10 @@ def parse_tfrecords(filenames, height, width, batch_size=32):
         max_height = tf.cast(tf.keras.backend.max(parsed_example['image/height']), tf.int32)
         max_width = tf.cast(tf.keras.backend.max(parsed_example['image/width']), tf.int32)
 
-        image_batch = tf.map_fn(lambda x: decode_pad_img(x, max_height, max_width), parsed_example['image_raw'], dtype=tf.keras.backend.floatx())
+        image_batch = tf.map_fn(lambda x: decode_pad_img(x, height, width), parsed_example['image_raw'], dtype=tf.keras.backend.floatx())
         image_batch.set_shape([None, None, None,3])
 
-        mask_batch = tf.map_fn(lambda x: decode_pad_msk(x, max_height, max_width), parsed_example['mask_raw'], dtype=tf.uint8)
+        mask_batch = tf.map_fn(lambda x: decode_pad_msk(x, height, width), parsed_example['mask_raw'], dtype=tf.uint8)
         mask_batch.set_shape([None, None, None,1])
 
 
