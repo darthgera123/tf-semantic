@@ -14,9 +14,9 @@ def MScaleV3Plus(input_shape, num_classes, weights='imagenet',backbone='resnet50
     # before concat [bs,256,144,192] after concat [bs,1280,144,192]
     conv_aspp = Conv2D(filters=256, kernel_size=1,use_bias=False)(aspp)
     conv_s2 = Conv2D(filters=48, kernel_size=1, use_bias=False)(s2_features)
-    # conv_aspp = #need to upsample conv_aspp to to size of s2_features, a nearest neighbor interpolation
-    cat_s4 = Concatenate(axis=1)([conv_s2, conv_aspp])
-    cat_s4_attn = Concatenate(axis=1)([conv_s2, conv_aspp])
+    conv_aspp = UpSampling2D(size=(4,4))(conv_aspp)
+    cat_s4 = Concatenate(axis=-1)([conv_s2, conv_aspp])
+    cat_s4_attn = Concatenate(axis=-1)([conv_s2, conv_aspp])
     #prediction head
     final = Conv2D(filters=256,kernel_size=3,use_bias=False)(cat_s4)
     final = BatchNormalization()(final)
@@ -24,7 +24,7 @@ def MScaleV3Plus(input_shape, num_classes, weights='imagenet',backbone='resnet50
     final = Conv2D(filters=256, kernel_size=3, use_bias=False)(final)
     final = BatchNormalization()(final)
     final = ReLU()(final)
-    final = Conv2D(filters=num_classes, kernel_size=1, use_bias=False)
+    final = Conv2D(filters=num_classes, kernel_size=1, use_bias=False)(final)
     # ##
     scale_attn = Conv2D(filters=256, kernel_size=3, use_bias=False)(cat_s4_attn)
     scale_attn = BatchNormalization()(scale_attn)
@@ -33,11 +33,13 @@ def MScaleV3Plus(input_shape, num_classes, weights='imagenet',backbone='resnet50
     scale_attn = Activation('sigmoid')(scale_attn)
 
     # what to do with scale_attn?
-    
-    model = Model(inputs=base_model.input, outputs=final, name="mscalev3plus")
-    return None
 
-# if __name__ == '__main__':
+    model = Model(inputs=base_model.input, outputs=final, name="mscalev3plus")
+    return model
+
+if __name__ == '__main__':
+    model = MScaleV3Plus((32,32,3),1000)
+    print(model.summary())
 #     res = ResNet50()
 #     layer0 = res.layers[0]
 #     # res.layers[0] = tf.keras.Sequential()
