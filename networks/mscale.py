@@ -1,40 +1,70 @@
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Conv2D, ReLU, UpSampling2D, Concatenate, BatchNormalization, Activation
+from tensorflow.keras.layers import Lambda, Mutiply, Conv2D, ReLU, UpSampling2D, Concatenate, BatchNormalization, Activation, Input
 from tensorflow.keras.applications import ResNet50
 from deeplabv3plus import ASPP
 import tensorflow as tf
 from tensorflow import keras
 
+def join_models(p_lo, scale_attn, p_1x):
+    return (p_lo + (1 - scale_attn) * p_1x)
+
 def MScaleV3Plus(input_shape, num_classes, weights='imagenet',backbone='resnet50'):
-    base_model = ResNet50(include_top=False,weights=weights,input_shape=input_shape)
-    image_features = base_model.get_layer('conv4_block6_out').output
-    s2_features = base_model.get_layer('conv2_block1_1_bn').output
-    aspp = ASPP(image_features)
+    input_1x = Input(shape=input_shape)
+    input_05x = Input(shape=(input_shape[0]//2, input_shape[1]//2, input_shape[2]))
+    base_model_1x = ResNet50(include_top=False,weights=weights,input_tensor=input_1x)
+    base_model_05x = ResNet50(include_top=False,weights=weights,input_tensor=input_05x)
+
+    #forward 1x
+    image_features_1x = base_model_1x.get_layer('conv4_block6_out').output
+    s2_features_1x = base_model_1x.get_layer('conv2_block1_1_bn').output
+    aspp_1x = ASPP(image_features_1x)
     # concatenate onto image features output of other features
     # before concat [bs,256,144,192] after concat [bs,1280,144,192]
-    conv_aspp = Conv2D(filters=256, kernel_size=1,use_bias=False)(aspp)
-    conv_s2 = Conv2D(filters=48, kernel_size=1, use_bias=False)(s2_features)
-    conv_aspp = UpSampling2D(size=(4,4))(conv_aspp)
-    cat_s4 = Concatenate(axis=-1)([conv_s2, conv_aspp])
-    cat_s4_attn = Concatenate(axis=-1)([conv_s2, conv_aspp])
-    #prediction head
-    final = Conv2D(filters=256,kernel_size=3,use_bias=False)(cat_s4)
-    final = BatchNormalization()(final)
-    final = ReLU()(final)
-    final = Conv2D(filters=256, kernel_size=3, use_bias=False)(final)
-    final = BatchNormalization()(final)
-    final = ReLU()(final)
-    final = Conv2D(filters=num_classes, kernel_size=1, use_bias=False)(final)
-    # ##
+    conv_aspp_1x = Conv2D(filters=256, kernel_size=1,use_bias=False)(aspp_1x)
+    conv_s2_1x = Conv2D(filters=48, kernel_size=1, use_bias=False)(s2_features_1x)
+    conv_aspp_1x = UpSampling2D(size=(4,4))(conv_aspp_1x)
+    cat_s4_1x = Concatenate(axis=-1)([conv_s2_1x, conv_aspp_1x])
+    # cat_s4_attn = Concatenate(axis=-1)([conv_s2, conv_aspp])
+    final_1x = Conv2D(filters=256,kernel_size=3,use_bias=False)(cat_s4_1x)
+    final_1x = BatchNormalization()(final_1x)
+    final_1x = ReLU()(final_1x)
+    final_1x = Conv2D(filters=256, kernel_size=3, use_bias=False)(final_1x)
+    final_1x = BatchNormalization()(final_1x)
+    final_1x = ReLU()(final_1x)
+    final_1x = Conv2D(filters=num_classes, kernel_size=1, use_bias=False)(final_1x)
+    
+    #forward 0.5x 
+    image_features_05x = base_model_05x.get_layer('conv4_block6_out').output
+    s2_features_05x = base_model_05x.get_layer('conv2_block1_1_bn').output
+    aspp_05x = ASPP(image_features_05x)
+    # concatenate onto image features output of other features
+    # before concat [bs,256,144,192] after concat [bs,1280,144,192]
+    conv_aspp_05x = Conv2D(filters=256, kernel_size=1,use_bias=False)(aspp_05x)
+    conv_s2_05x = Conv2D(filters=48, kernel_size=1, use_bias=False)(s2_features_05x)
+    conv_aspp_05x = UpSampling2D(size=(4,4))(conv_aspp_05x)
+    cat_s4_05x = Concatenate(axis=-1)([conv_s2_05x, conv_aspp_05x])
+    cat_s4_attn = Concatenate(axis=-1)([conv_s2_05x, conv_aspp_05x])
+    final_05x = Conv2D(filters=256,kernel_size=3,use_bias=False)(cat_s4_05x)
+    final_05x = BatchNormalization()(final_05x)
+    final_05x = ReLU()(final_05x)
+    final_05x = Conv2D(filters=256, kernel_size=3, use_bias=False)(final_05x)
+    final_05x = BatchNormalization()(final_05x)
+    final_05x = ReLU()(final_05x)
+    final_05x = Conv2D(filters=num_classes, kernel_size=1, use_bias=False)(final_05x)
+
     scale_attn = Conv2D(filters=256, kernel_size=3, use_bias=False)(cat_s4_attn)
     scale_attn = BatchNormalization()(scale_attn)
     scale_attn = ReLU()(scale_attn)
     scale_attn = Conv2D(filters=2, kernel_size=1, use_bias=False)(scale_attn)
     scale_attn = Activation('sigmoid')(scale_attn)
 
-    # what to do with scale_attn?
+    #join models
+    p_lo = Mutiply()([scale_attn, final_05x])
+    # scale p_lo to the same size as final_1x
+    # scale scale_attn to the same size as final_1x
+    joint_pred = Lambda(join_models)([p_lo,scale_attn,final_1x)
 
-    model = Model(inputs=base_model.input, outputs=final, name="mscalev3plus")
+    model = Model(inputs=[input_05x,input_1x], outputs=joint_pred, name="mscalev3plus")
     return model
 
 if __name__ == '__main__':
