@@ -62,7 +62,7 @@ def MScaleV3Plus(input_shape, num_classes, weights='imagenet',backbone='resnet50
     p_lo = Mutiply()([scale_attn, final_05x])
     # scale p_lo to the same size as final_1x
     # scale scale_attn to the same size as final_1x
-    joint_pred = Lambda(join_models)([p_lo,scale_attn,final_1x)
+    joint_pred = Lambda(join_models)([p_lo,scale_attn,final_1x])
 
     model = Model(inputs=[input_05x,input_1x], outputs=joint_pred, name="mscalev3plus")
     return model
